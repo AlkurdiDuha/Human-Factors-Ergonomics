@@ -1,0 +1,680 @@
+---
+title: "R Notebook"
+output: html_notebook
+author: Duha Alkurdi
+---
+
+
+
+```{r}
+#Loading the necessary libraries
+library(signal)
+library(readr)
+library(tidyr) # Load tidyr for data transformation
+library(ggplot2)  # For plotting
+library(tidyverse)
+library(zoo) # For rollapply
+library(dplyr) # For data manipulation
+library(grid)  # for the unit function
+library(RColorBrewer)
+```
+```{r}
+# The first step will be obviously reading the extracted data as they are saved in the .csv files 
+# Each of the .csv file represent a participant 
+Participant1 <- read_csv("../Hand sEMG dataset/1_raw.csv")
+Participant2 <- read_csv("../Hand sEMG dataset/2_raw.csv")
+Participant3 <- read_csv("../Hand sEMG dataset/3_raw.csv")
+Participant4 <- read_csv("../Hand sEMG dataset/4_raw.csv")
+Participant5 <- read_csv("../Hand sEMG dataset/5_raw.csv")
+
+# As none of the previously read data sets have column headers, the next step will be to create/initiate column headers 
+colnames(Participant1) <- c("Extensor Carpi Ulnaris", "Flexor Carpi Ulnaris", "Extensor Carpi Radialis", "Flexor Carpi Radialis")
+colnames(Participant2) <- c("Extensor Carpi Ulnaris", "Flexor Carpi Ulnaris", "Extensor Carpi Radialis", "Flexor Carpi Radialis")
+colnames(Participant3) <- c("Extensor Carpi Ulnaris", "Flexor Carpi Ulnaris", "Extensor Carpi Radialis", "Flexor Carpi Radialis")
+colnames(Participant4) <- c("Extensor Carpi Ulnaris", "Flexor Carpi Ulnaris", "Extensor Carpi Radialis", "Flexor Carpi Radialis")
+colnames(Participant5) <- c("Extensor Carpi Ulnaris", "Flexor Carpi Ulnaris", "Extensor Carpi Radialis", "Flexor Carpi Radialis")
+
+```
+```{r}
+# Adding the time variable to the data sets
+# Based on the description, the sampling rate is 2000 hertz
+fs <- 2000 # Defining the sampling rate as 2000 hertz
+
+# The next step is to add the time to the data sets 
+# Function to add time column to a participant data set
+add_time_column <- function(participant_data) {
+  n <- nrow(participant_data) # Number of samples in the data set
+  time <- seq(from = 0, by = 1/fs, length.out = n) # Create time variable
+  participant_data$time <- time # Add time column to the data set
+  return(participant_data)
+}
+
+# Apply the function to each participant's data
+Participant1 <- add_time_column(Participant1)
+Participant2 <- add_time_column(Participant2)
+Participant3 <- add_time_column(Participant3)
+Participant4 <- add_time_column(Participant4)
+Participant5 <- add_time_column(Participant5)
+
+```
+```{r}
+# Defining the output directory that will be used to save the data
+output_directory <- "../Plots/"
+# Plotting the EMG signals for each of the participants against the time 
+plot_muscle_signals <- function(participant_data, participant_id) {
+  # Reshape the data for plotting with ggplot2
+  
+  long_format_data <- pivot_longer(participant_data, cols = -time, names_to = "Muscle", values_to = "Signal")
+  
+  # Plotting
+  p <- ggplot(long_format_data, aes(x = time, y = Signal, color = Muscle)) +
+    geom_line() +
+    labs(
+         x = "Time (seconds)",
+         y = "Signal") +
+    theme_minimal() +
+    theme(
+      panel.background = element_rect(fill = "white"), # Set the panel background to white
+      plot.background = element_rect(fill = "white"), # Set the plot background to white
+      panel.grid.major = element_line(color = "grey80"), # Set major grid lines to a light grey color
+      panel.grid.minor = element_line(color = "grey90")  # Set minor grid lines to an even lighter grey color
+    ) +
+    scale_color_brewer(palette = "Set1") # Use a color palette for differentiation
+  
+  print(p) # Display the plot
+  
+    # Save the plot to the specified directory
+  plot_filename <- paste(output_directory, "Muscle_Activity_Participant_", participant_id, ".png", sep =  "")
+  ggsave(plot_filename, plot = p, width = 8, height = 6)
+}
+
+
+plot_muscle_signals(Participant1, 1)
+plot_muscle_signals(Participant2, 2)
+plot_muscle_signals(Participant3, 3)
+plot_muscle_signals(Participant4, 4)
+plot_muscle_signals(Participant5, 5)
+
+```
+
+```{r}
+# Plotting all participants EMG signals in one 
+# First step: Combine all participant data into one data frame with an identifier for each participant
+combined_data <- bind_rows(
+  Participant1 %>% mutate(Participant = 'Participant 1'),
+  Participant2 %>% mutate(Participant = 'Participant 2'),
+  Participant3 %>% mutate(Participant = 'Participant 3'),
+  Participant4 %>% mutate(Participant = 'Participant 4'),
+  Participant5 %>% mutate(Participant = 'Participant 5')
+)
+
+# Reshape the combined data for plotting
+long_format_data <- combined_data %>%
+  pivot_longer(cols = -c(time, Participant), names_to = "Muscle", values_to = "Signal")
+
+# Plotting with subplots for each participant
+p <- ggplot(long_format_data, aes(x = time, y = Signal, color = Muscle)) +
+  geom_line() +
+  labs(
+    x = "Time (seconds)",
+    y = "EMG Signal (mV)",
+    color = "Muscle"
+  ) +
+  facet_wrap(~Participant, scales = "fixed") +
+  theme_minimal() +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "grey80"),
+    panel.grid.minor = element_line(color = "grey90"),
+    strip.background = element_rect(fill = "lightgray", color = "black"),
+    strip.text = element_text(size = 10, face = "bold"),
+    legend.position = "bottom"
+  ) +
+  scale_color_brewer(palette = "Set1")
+
+# Print the plot
+print(p)
+
+
+# Save the plot to the specified directory
+plot_filename <- paste(output_directory, "Combined_Muscle_Activity.png", sep = "")
+ggsave(plot_filename, plot = p, width = 14, height = 8, dpi = 300)
+
+```
+```{r}
+# # Due to the noise and distortion in the raw signal, the next step is to implement filter, but before that could be done, the cutoff frequencies for those filters had to be decided
+# # The cutoff- will be performed using the fast fourier transform or the FFT sampling frequency 2000 hertz
+# # FFT-To find cutoff frequencies for BP (Band Pass) filter
+#
+# # Frequency resolution = fs /L, where fs is the sampling frequency and L is the data length
+# # Frequency range for FFT
+# # FFT frequency range is defined by frequency resolution from 0 to 1/2 data length
+#
+#
+# # Calculate FFT
+# fft_data <- fft(Participant1[, 1:4] <- sapply(Participant1[, 1:4], as.numeric)) # Applying FFT to the first four columns excluding time
+#
+# # Calculate Magnitude Spectrum
+# mag_spectrum <- Mod(fft_data)
+#
+# # Frequency Vector
+# L <- nrow(Participant1) # Data length
+# fs <- 2000 # Sampling frequency
+# f <- seq(0, fs/2, length.out = length(mag_spectrum)/2) # Frequency vector for the first half
+
+# # Plotting the Magnitude Spectrum
+# plot(f, mag_spectrum[1:length(f)], type = 'l',
+#      xlab = "Frequency (Hz)", ylab = "Magnitude",
+#      main = "Magnitude Spectrum of Participant 1", col = "blue")
+#
+# # Enhancing the plot
+# grid()
+#
+#
+# # As an approximation, assuming the first peak near 0 Hz is not an artifact, the lower cutoff might be set at about 5-10 Hz to exclude the baseline noise, while the upper cutoff might be set around 500 Hz, which is the point where the signal returns to the noise floor.
+
+```
+```{r}
+# After defining the lower cutoff point as 10 HZ and the upper cutoff point as 500 HZ for the band pass filter, the next steps are to design and apply this filter to the EMG data
+
+# Define the cutoff frequencies
+low_cutoff <- 10  # Low cutoff frequency (Hz)
+high_cutoff <- 500 # High cutoff frequency (Hz)
+
+# Design the Butterworth band pass filter
+# Wn is a vector of the two normalized cutoff frequencies, between 0 and 1, 
+# where 1 corresponds to the Nyquist frequency, which is half the sampling rate.
+Wn <- c(low_cutoff, high_cutoff) / (fs/2)
+
+# Create a 4th order Butterworth filter
+# The order represents the required filter sharpness
+butterworth_filter <- butter(4, Wn, type="pass") # 4th order Butterworth filter
+
+# Apply the Butterworth band pass filter to each EMG signal column of Participant 1
+# Participant1 data frame has columns for EMG signals named as follows:
+# "Extensor Carpi Ulnaris", "Flexor Carpi Ulnaris", "Extensor Carpi Radialis", "Flexor Carpi Radialis"
+
+filtered_signals <- Participant1 %>%
+   select(`Extensor Carpi Ulnaris`, `Flexor Carpi Ulnaris`, `Extensor Carpi Radialis`, `Flexor Carpi Radialis`) %>%
+  map_df(~filtfilt(butterworth_filter$b, butterworth_filter$a, .))
+
+# Add the time column back to the filtered data frame
+filtered_signals$time <- Participant1$time
+
+# Update the column names to reflect that these are filtered signals
+colnames(filtered_signals) <- c("Filtered Extensor Carpi Ulnaris", "Filtered Flexor Carpi Ulnaris", "Filtered Extensor Carpi Radialis", "Filtered Flexor Carpi Radialis", "Time")
+
+# Now, the next step is to plot the filtered signals to observe the effect of the filter
+plot_muscle_signals <- function(filtered_data, participant_id) {
+  long_format_data <- pivot_longer(filtered_data, cols = -Time, names_to = "Muscle", values_to = "Signal")
+  
+  p <- ggplot(long_format_data, aes(x = Time, y = Signal, color = "black")) +
+    geom_line(color = "black") +
+    facet_wrap(~ str_replace(Muscle, "Filtered ", ""), scales = 'free_y', ncol = 1) + # Create subplots for each muscle
+    labs(x = "Time (seconds)", y = "EMG Signal (mV)") +
+    theme_minimal() +
+    theme(
+      strip.background = element_rect(fill = "lightgray", color = "black"), # Strip with muscle names
+      strip.text = element_text(size = 10, face = "bold"),
+      legend.position = "none", # Remove legend
+      panel.background = element_rect(fill = "white"), 
+      plot.background = element_rect(fill = "white"), 
+      panel.grid.major = element_line(color = "grey80"), 
+      panel.grid.minor = element_line(color = "grey90")
+    ) 
+
+  # Display the plot
+  print(p)
+
+  # Save the plot to the specified directory
+  plot_filename <- file.path(output_directory, paste("Filtered_Muscle_Activity_Participant_", participant_id, ".png", sep = ""))
+  ggsave(plot_filename, plot = p, width = 8, height = 6)
+}
+
+
+# Plot the filtered signals for Participant 1
+plot_muscle_signals(filtered_signals, 1)
+```
+
+```{r}
+# Applying the "Full-Wave" Rectifying 
+# Full-wave Rectify the filtered signals
+# Simply take the absolute value of each EMG signal to perform full-wave rectification
+rectified_signals <- filtered_signals %>%
+  mutate(`Filtered Extensor Carpi Ulnaris` = abs(`Filtered Extensor Carpi Ulnaris`),
+         `Filtered Flexor Carpi Ulnaris` = abs(`Filtered Flexor Carpi Ulnaris`),
+         `Filtered Extensor Carpi Radialis` = abs(`Filtered Extensor Carpi Radialis`),
+         `Filtered Flexor Carpi Radialis` = abs(`Filtered Flexor Carpi Radialis`))
+
+# Now, rectified_signals contains the full-wave rectified EMG data
+plot_rectified_signals <- function(rectified_data, participant_id) {
+  # Convert to long format for ggplot2
+  long_format_data <- pivot_longer(rectified_data, cols = starts_with("Filtered"), names_to = "Muscle", values_to = "Signal")
+  
+  # Plot with a separate panel for each muscle
+  p <- ggplot(long_format_data, aes(x = Time, y = Signal)) +
+    geom_line() + # Add lines to plot the rectified signal
+    facet_wrap(~ str_replace(Muscle, "Filtered ", ""), scales = "free_y", ncol = 1) + # Create sub figures for each muscle, with independent y scales
+    labs(
+         x = "Time (seconds)",
+         y = "EMG Signal (mV)") + # Update y-axis label
+    theme_minimal() + # Use a minimal theme for a clean look
+    theme(legend.position = "right",
+          legend.background = element_rect(fill = "white", color = "black", size = 0.5), # White background with a black border
+          legend.key = element_rect(fill = "white", color = "black"), # White fill and black border for the keys
+          legend.text = element_text(size = 10), # Text size for the legend items
+          strip.background = element_rect(fill = "lightgray"),
+          strip.text = element_text(size = 10,face = "bold"), # Make facet titles bold
+          panel.background = element_rect(fill = "white"), 
+          plot.background = element_rect(fill = "white"), 
+          panel.grid.major = element_line(color = "grey80"), 
+          panel.grid.minor = element_line(color = "grey90")) +
+    theme(plot.title = element_text(hjust = 0.5)) # Center the plot title
+  
+  print(p) # Display the plot
+  
+  # Save the plot
+  plot_filename <- paste(output_directory, "Rectified_Muscle_Activity_Participant_", participant_id, ".png", sep = "")
+  ggsave(plot_filename, plot = p, width = 8, height = 6)
+}
+
+# Plotting the rectified EMG data
+plot_rectified_signals(rectified_signals, 1)
+
+```
+```{r}
+
+# The next step, is to find the "RMS" envelope or a moving average and this shows the mean power of the average power of the signal using a specific window size. Here, the window size is 50 ms
+
+# RMS Envelope (Moving Average)~Mean power of signal
+# The RMS value is a measure of the signal's magnitude that's particularly useful for analyzing varying signals like EMG. For a window size of 50 milliseconds, given a sampling rate of 2000 Hz, the number of samples per window would be 2000 * 0.050 = 100 samples
+
+# First, define a function to calculate RMS over a vector
+calculate_rms <- function(x) {
+  sqrt(mean(x^2))
+}
+
+# Apply the RMS calculation over a moving window for each muscle signal
+# The window size is 100 samples, as calculated for 50 ms at 2000 Hz sampling rate
+rms_signals <- rectified_signals %>%
+  mutate(across(starts_with("Filtered"), ~rollapply(.x, 100, calculate_rms, fill = NA, align = "right")))
+
+# Update column names to reflect that these are RMS values
+colnames(rms_signals) <- sub("Filtered", "RMS", colnames(rms_signals))
+
+# Plotting function for RMS signals, similar to previous plot function but adapted for RMS
+plot_rms_signals <- function(rms_data, participant_id) {
+  # Convert to long format for ggplot2
+  long_format_data <- pivot_longer(rms_data, cols = starts_with("RMS"), names_to = "Muscle", values_to = "Signal")
+  
+  # Plot using ggplot2, with a separate panel for each muscle
+  p <- ggplot(long_format_data, aes(x = Time, y = Signal)) +
+    geom_line() + # Add lines to plot the RMS signal
+    facet_wrap(~ str_replace(Muscle, "RMS ", ""),  scales = "free_y", ncol = 1) + # Create sub figures for each muscle, with independent y scales if desired
+    labs(
+         x = "Time (seconds)",
+         y = "EMG Signal (mV)") + # Update y-axis label to RMS EMG (mV)
+    theme_minimal() + # Use a minimal theme for a clean look
+    theme(legend.position = "right",
+          legend.background = element_rect(fill = "white", color = "black", size = 0.5), # White background with a black border
+          legend.key = element_rect(fill = "white", color = "black"), # White fill and black border for the keys
+          legend.text = element_text(size = 12), # Text size for the legend items
+          strip.background = element_rect(fill = "lightgray"),
+          strip.text = element_text(size = 10,face = "bold"), # Make facet titles bold
+          panel.background = element_rect(fill = "white"), 
+          plot.background = element_rect(fill = "white"), 
+          panel.grid.major = element_line(color = "grey80"), 
+          panel.grid.minor = element_line(color = "grey90")) +
+    theme(plot.title = element_text(hjust = 0.5)) # Center the plot title
+  
+  print(p) # Display the plot
+  
+  # Save the plot
+  plot_filename <- paste(output_directory, "RMS_Muscle_Activity_Participant_", participant_id, ".png", sep = "")
+  ggsave(plot_filename, plot = p, width = 8, height = 6)
+}
+
+# Plot the RMS signals for Participant 1
+plot_rms_signals(rms_signals, 1)
+# NOTE: A larger window size will encompass more of the original signal, but it will also have more distortion and will be spiky. On the other hand, a lower window size will give a rather flat signal which does not reflect the peaks and the bumps of the original signal. So, a moderate window size should be chosen! 
+```
+```{r}
+
+# The final step is normalization, so if you want to compare your signal across different subjects, the signals should be normalized with respect to the maximum voluntary contraction or MVC 
+
+# Simply, the envelope should be divided by the MVC and obtain the final reading as a percentage
+# Calculate the maximum voluntary contraction (MVC) for each RMS column
+mvc_values <- rms_signals %>%
+  select(starts_with("RMS")) %>%
+  summarise(across(everything(), ~max(.x, na.rm = TRUE)))
+
+# Normalize the RMS signals by their respective MVC and convert to percentages
+normalized_signals <- rms_signals %>%
+  mutate(across(starts_with("RMS"), 
+                ~(.x / mvc_values[[cur_column()]]) , 
+                .names = "percent_{.col}"))
+
+
+```
+
+```{r}
+# Plotting the rectified signal against the normalized value
+
+# First, we should ensure that the Time column is in the correct format and not a factor or character
+rectified_signals$Time <- as.numeric(as.character(rectified_signals$Time))
+normalized_signals$Time <- as.numeric(as.character(normalized_signals$Time))
+
+# We pivot the rectified_signals to a long format
+rectified_long <- rectified_signals %>%
+  pivot_longer(cols = -Time, names_to = "Muscle", values_to = "Rectified_Value") %>%
+  mutate(Muscle = str_replace(Muscle, "Filtered ", ""))
+
+# Create a new data frame that drops columns starting with "RMS" and keeps those with "percent_RMS" and "Time"
+normalized_signals_only <- normalized_signals %>%
+  select(Time, starts_with("percent_RMS"))
+
+# Now pivot the normalized_signals_only to a long format and define the muscle names
+normalized_long <- normalized_signals_only %>%
+  pivot_longer(
+    cols = -Time,  # Exclude the Time column from the pivot
+    names_to = "Muscle", 
+    values_to = "percent_RMS_Value"
+  ) %>%
+  mutate(Muscle = str_replace(Muscle, "percent_RMS ", ""))  # Remove the "percent_RMS" prefix
+
+# This will result in a data frame with three columns: Time, Muscle, and percent_RMS_Value
+
+# Ensure that the Muscle names are consistent between the two data frames
+rectified_long$Muscle <- as.character(rectified_long$Muscle)
+normalized_long$Muscle <- as.character(normalized_long$Muscle)
+
+# Merge the data on Time and Muscle
+combined_data <- full_join(rectified_long, normalized_long, by = c("Time", "Muscle"))
+
+# Now plot the data with 4 subplots for the non-percent data only
+final_plot <- ggplot(combined_data, aes(x = Time)) +
+  geom_line(aes(y = Rectified_Value, colour = "Rectified Signal"), size = 1) +
+  geom_line(aes(y = percent_RMS_Value, colour = "Normalized Signal"), size = 1) +
+  facet_wrap(~Muscle, scales = "free_y", ncol = 1) +
+  theme_minimal() +
+  scale_colour_manual(
+    values = c("Rectified Signal" = "black", "Normalized Signal" = "grey60"),
+    labels = c("Rectified Signal" = "Rectified Signal", "Normalized Signal" = "Normalized Signal")
+  ) +
+  labs(
+    x = "Time",
+    y = "EMG Signal (mV)",
+    colour = "Signal Type" # Title for the legend
+  ) +
+  theme(
+    strip.background = element_rect(fill = "lightgray"),
+    strip.text = element_text(size = 10, face = "bold"), # Make facet titles bold
+    panel.background = element_rect(fill = "white"), 
+    plot.background = element_rect(fill = "white"), 
+    panel.grid.major = element_line(color = "grey80"), 
+    panel.grid.minor = element_line(color = "grey90"),
+    legend.position = "bottom" # Ensure legend is visible by placing it at the bottom
+  )
+
+# Print the final plot
+print(final_plot)
+
+# Construct the full file path for saving the plot
+# Make sure that 'output_directory' is defined before this line and points to a valid directory path
+file_path <- file.path(output_directory, "rectified_signal_against_normalized_value.png")
+
+# Save the plot to the specified directory
+ggsave(file_path, plot = final_plot, width = 11, height = 8)
+
+
+```
+```{r}
+# Function to calculate mean and median for every 2000 rows for a given muscle
+# Based on the description of the problem, the sampling rate was 2000 hertz, meaning that each 2000 data points corresponds to 1 second in real life.
+# The first step, that we are doing here, is aggregating the data points for "participant 1" combining each 2000 rows together, so it represent 1 second 
+calculate_muscle_stats <- function(data, muscle_name) {
+  data %>%
+    mutate(segment = ceiling(row_number() / 2000)) %>%
+    group_by(segment) %>%
+    summarise(mean = mean(!!sym(muscle_name), na.rm = TRUE),
+              median = median(!!sym(muscle_name), na.rm = TRUE)) %>%
+    ungroup() %>%
+    select(-segment)
+} # The function is defining segments of data; where each segment contains 2000 rows. The function calculates summary statistics (mean and median) for each segment  
+
+# Specify the muscle names
+muscles <- c("percent_RMS Extensor Carpi Ulnaris", 
+             "percent_RMS Flexor Carpi Ulnaris", 
+             "percent_RMS Extensor Carpi Radialis", 
+             "percent_RMS Flexor Carpi Radialis")
+
+# Apply the function to each muscle
+muscle_activity_stats_list <- lapply(muscles, function(muscle) calculate_muscle_stats(normalized_signals, muscle))
+
+# Combine the results into a new dataframe
+muscle_activity_stats <- do.call(cbind, muscle_activity_stats_list)
+
+# Rename the columns to reflect mean and median for each muscle
+new_col_names <- sapply(muscles, function(name) c(paste(name, "Mean", sep = "_"), paste(name, "Median", sep = "_")))
+colnames(muscle_activity_stats) <- unlist(new_col_names)
+
+# Calculate the total number of entries required for the 'time' sequence
+total_segments <- nrow(muscle_activity_stats)  # The "total_segments" that we have is 640, which represents the total time for the experiment (5 cycles and 4 resting rounds)
+
+# Create a time sequence from 1 to the number of segments, multiplying by the segment size 
+time_sequence <- seq(from = 1, to = total_segments, by = 1)
+
+# Add the time sequence to the muscle_activity_stats dataframe
+muscle_activity_stats$time <- time_sequence
+
+# View the results
+print(muscle_activity_stats)
+
+```
+```{r}
+# Creating a plot that shows the mean and the median values for a specific channel; muscle over a specific time segment 
+muscle_activity_stats_subset <- muscle_activity_stats[0:640, ]
+
+# Defining the specific color palette
+color_palette <- brewer.pal(n = 2, name = "Set1")
+
+# Create the plot with the new color palette
+ggplot(muscle_activity_stats_subset, aes(x = time)) + 
+  geom_line(aes(y = `percent_RMS Extensor Carpi Ulnaris_Mean`, color = "Mean")) + 
+  geom_line(aes(y = `percent_RMS Extensor Carpi Ulnaris_Median`, color = "Median")) +
+  scale_color_manual(values = color_palette) +
+  labs(x = "Time Segment",
+       y = "Signal Value",
+       color = "Statistic") +
+  theme_minimal(base_size = 12) + 
+  theme(
+    legend.position = "bottom",
+    legend.title = element_blank(),
+    panel.grid.major = element_line(color = "grey80", size = 0.5),
+    panel.grid.minor = element_line(color = "grey90", size = 0.25),
+    plot.background = element_rect(fill = "white", color = "black", size = 1),
+    panel.background = element_rect(fill = "white", colour = NA),
+    plot.margin = unit(c(1, 1, 1, 1), "lines")
+  )
+
+# Define the output directory and file name
+output_directory <- "../Plots/"
+file_name <- "percent_RMS_Extensor_Carpi_Ulnaris_Mean_Median_over_Time.png"
+
+# Save the plot
+ggsave(filename = paste0(output_directory, file_name), plot = last_plot(), width = 10, height = 6, dpi = 300)
+
+```
+
+
+```{r}
+# Create a function to label the data based on the recording timeline, and define the posture for each time stamp 
+# Pseudo-code to add state column based on the provided sequence and duration
+add_hand_state <- function(time_sec, cycle_duration, rest_duration, movements_sequence) {
+  # Calculate cycle number
+  cycle_number <- ceiling(time_sec / (cycle_duration + rest_duration))
+  
+  # Time within the current cycle or rest period
+  time_within_cycle_or_rest <- time_sec %% (cycle_duration + rest_duration )
+  
+  # Determine if the time is within a rest period
+  if (time_within_cycle_or_rest > cycle_duration) {
+    return('Rest')
+  } else {
+    # Determine the hand state based on the time within the cycle
+    # Define the start and end times for each hand movement within the cycle
+    for (movement in movements_sequence) {
+      if (time_within_cycle_or_rest >= movement$start_time && time_within_cycle_or_rest < movement$end_time) {
+        return(movement$name)
+      }
+    }
+  }
+  # Default to 'Unknown' if no state is matched 
+  # I have to updated this, since there was a problem with second 134 
+  return('Rest')
+}
+# Define the duration of each movement within the cycle
+
+movements_sequence <- list(
+  list(name = 'Rest', start_time = 1, end_time = 15),
+  list(name = 'Extension', start_time = 15, end_time = 21),
+  list(name = 'Rest', start_time = 21, end_time = 25),
+  list(name = 'Flexion', start_time = 25, end_time = 31),
+  list(name = 'Rest', start_time = 31, end_time = 35),
+  list(name = 'Ulnar Deviation', start_time = 35, end_time = 41),
+  list(name = 'Rest', start_time = 41, end_time = 45),
+  list(name = 'Radial Deviation', start_time = 45, end_time = 51),
+  list(name = 'Rest', start_time = 51, end_time = 55),
+  list(name = 'Grip', start_time = 55, end_time = 61),
+  list(name = 'Rest', start_time = 61, end_time = 65),
+  list(name = 'Abduction of Fingers', start_time = 65, end_time = 75),
+  list(name = 'Adduction of Fingers', start_time = 75, end_time = 81),
+  list(name = 'Rest', start_time = 81, end_time = 85),
+  list(name = 'Supination', start_time = 85, end_time = 95),
+  list(name = 'Pronation', start_time = 95, end_time = 101),
+  list(name = 'Rest', start_time = 101, end_time = 105)
+)
+
+# Apply the function to each time point to create the hand state column
+muscle_activity_stats$hand_state <- sapply(muscle_activity_stats$time, function(time_sec) {
+  add_hand_state(time_sec, cycle_duration = 104, rest_duration = 30, movements_sequence)
+})
+
+# View the results with the new hand state column
+print(muscle_activity_stats)
+
+```
+```{r}
+# Just, not to miss up with the previous code, this will be added in a separate cell!
+# Function to calculate cycle number based on time
+calculate_cycle <- function(time_sec, cycle_duration, rest_duration) {
+  total_duration <- cycle_duration + rest_duration
+  cycle_number <- floor((time_sec - 1) / total_duration) + 1
+  time_within_cycle_or_rest <- (time_sec - 1) %% total_duration
+  
+  if (time_within_cycle_or_rest >= cycle_duration) {
+    return(paste("Resting_Period", cycle_number))
+  } else {
+    return(paste("Cycle", cycle_number))
+  }
+}
+
+
+# Apply the calculate_cycle function to each time point to create the cycle number column
+muscle_activity_stats$cycle_number <- sapply(muscle_activity_stats$time, function(time_sec) {
+  calculate_cycle(time_sec, cycle_duration = 104, rest_duration = 30)
+})
+
+# View the results with the new cycle number column
+print(muscle_activity_stats)
+
+```
+
+
+```{r}
+# Ex tensor Carpi Ulnaris signal across different gestures
+
+# Ensure 'hand_state' is a factor with levels ordered as they occur in time
+muscle_activity_stats$hand_state <- factor(muscle_activity_stats$hand_state, 
+                                           levels = unique(muscle_activity_stats$hand_state))
+
+# Plotting muscle signals 
+ggplot(data = muscle_activity_stats, aes(x = time)) +
+  geom_line(aes(y = `percent_RMS Extensor Carpi Ulnaris_Mean`, color = "Muscle Signal"), size = 1) + # Define line properties
+  geom_ribbon(aes(ymin = 0, ymax = Inf, fill = hand_state), alpha = 0.5) +
+  scale_fill_grey(start = 0.8, end = 0.2, guide = FALSE) + # Greyscale for fill
+  scale_color_manual(values = c("Muscle Signal" = "black")) + # Manual color for the line
+  labs(y = "EMG Signal (mV)", x = "Time (s)", color = "Signal Type") + # Adjust labels
+  facet_wrap(~hand_state, scales = "fixed", ncol = 2) + # Facet wrap with 2 columns
+  theme_minimal() +
+  theme(
+    legend.position = "none", # Set the legend position to none
+    strip.background = element_rect(fill = "lightgray"), # Light grey background for facet labels
+    strip.text = element_text(size = 10, face = "bold"), # Bold and sized facet labels
+    panel.background = element_rect(fill = "white"),  # White panel background
+    plot.background = element_rect(fill = "white"),   # White plot background
+    panel.grid.major = element_line(color = "grey80"), # Major grid lines in light grey
+    panel.grid.minor = element_line(color = "grey90")  # Minor grid lines in very light grey
+  )
+
+# Define the output directory and file name
+output_directory <- "../Plots/"
+file_name <- "Extensor_Carpi_Ulnaris_with_Hand_State_Greyscale.png"
+
+# Save the plot
+ggsave(filename = paste0(output_directory, file_name), plot = last_plot(), width = 12, height = 8, dpi = 300)
+
+```
+
+```{r}
+# All mussels' actives across different gestures 
+
+library(stringr)
+# Filter out the median columns if they are named with a specific pattern, for example, ending with "_Median"
+muscle_activity_means <- muscle_activity_stats %>%
+  select(time, hand_state, matches("Mean$")) %>% # Select only columns that end with "Mean"
+  pivot_longer(
+    cols = -c(time, hand_state), 
+    names_to = "Muscle", 
+    values_to = "percent_RMS_Mean"
+  ) %>%
+  mutate(Muscle = str_remove(Muscle, "_Mean")) # Clean up muscle names by removing "_Mean"
+
+# Ensure 'hand_state' is a factor with levels ordered as they occur in time
+muscle_activity_means$hand_state <- factor(muscle_activity_means$hand_state, 
+                                           levels = unique(muscle_activity_means$hand_state))
+
+# Update the Muscle names in the data frame to remove 'percent_RMS'
+muscle_activity_means <- muscle_activity_means %>%
+  mutate(Muscle = str_remove(Muscle, "percent_RMS ")) # This will remove the 'percent_RMS' from the muscle names
+
+# Plotting muscle signals for different hand gestures, with a subplot for each gesture
+plot <- ggplot(data = muscle_activity_means, aes(x = time, y = percent_RMS_Mean)) +
+  geom_line(aes(color = Muscle), size = 1) + # Use color to differentiate muscles
+  facet_wrap(~hand_state, scales = "fixed", ncol = 2) + # Separate plots for each hand gesture
+  scale_color_brewer(palette = "Set1") + # Define the color palette 
+  labs(y = "EMG Signal (mV)", x = "Time (s)", color = "Muscle") + # Adjust labels
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    strip.background = element_rect(fill = "lightgray"),
+    strip.text = element_text(size = 10, face = "bold"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "grey80"),
+    panel.grid.minor = element_line(color = "grey90")
+  )
+
+# Print the plot
+print(plot)
+
+# Define the output directory and file name
+output_directory <- "../Plots/"
+file_name <- "Muscle_Activity_Means_Across_Hand_Gestures.png"
+
+# Save the plot
+ggsave(filename = paste0(output_directory, file_name), plot = plot, width = 8, height = 12, dpi = 300)
+
+
+```
